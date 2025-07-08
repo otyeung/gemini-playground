@@ -25,9 +25,9 @@ export class VideoRecorder {
         this.captureInterval = null;
         this.options = {
             fps: options.fps || 1, // 使用传入的fps,默认为1
-            quality: 0.6,
-            width: 640,
-            height: 480,
+            quality: options.quality || 0.6,
+            width: options.resizeWidth || options.width || 640,
+            height: options.height || 480,
             maxFrameSize: 100 * 1024, // 100KB max per frame
             ...options
         };
@@ -231,4 +231,35 @@ export class VideoRecorder {
         
         return base64Data;
     }
-} 
+
+    /**
+     * Set FPS for video recording
+     * @param {number} fps - Frames per second
+     */
+    setFPS(fps) {
+        this.options.fps = fps;
+        if (this.isRecording && this.captureInterval) {
+            // Restart capture with new FPS
+            clearInterval(this.captureInterval);
+            this.startFrameCapture();
+        }
+    }
+
+    /**
+     * Set resize width for video recording
+     * @param {number} width - Width in pixels
+     */
+    setResizeWidth(width) {
+        this.options.width = width;
+        // Note: Changing width requires restarting the camera stream
+        // This will be handled by the VideoManager
+    }
+
+    /**
+     * Set quality for video recording
+     * @param {number} quality - Quality value between 0.1 and 1.0
+     */
+    setQuality(quality) {
+        this.options.quality = quality;
+    }
+}

@@ -294,4 +294,26 @@ export class MultimodalLiveClient extends EventEmitter {
             });
         }
     }
-} 
+
+    /**
+     * Updates the current configuration and sends a new setup message
+     * @param {Object} newConfig - New configuration to apply
+     */
+    updateConfig(newConfig) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            throw new Error('WebSocket is not connected');
+        }
+        
+        this.config = {
+            ...newConfig,
+            tools: [
+                ...this.toolManager.getToolDeclarations(),
+                ...(newConfig.tools || [])
+            ]
+        };
+        
+        const setupMessage = { setup: this.config };
+        this._sendDirect(setupMessage);
+        this.log('client.send', 'setup (config update)');
+    }
+}

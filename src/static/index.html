@@ -54,15 +54,41 @@
 					<div class="setting-container">
 						<span class="setting-label">Video FPS: </span>
 						<input
-							type="number"
-							id="fps-input"
-							placeholder="Video FPS"
-							value="1"
+							type="range"
+							id="fps-slider"
 							min="1"
-							max="30"
+							max="10"
+							value="1"
 							step="1"
 						/>
+						<span id="fps-value">1 FPS</span>
 						<span class="fps-help">Higher FPS need more network bandwidth</span>
+					</div>
+					<div class="setting-container">
+						<span class="setting-label">Resize Width: </span>
+						<input
+							type="range"
+							id="resize-width-slider"
+							min="640"
+							max="1920"
+							value="640"
+							step="80"
+						/>
+						<span id="resize-width-value">640px</span>
+						<span class="resize-width-help">Video frame width resolution</span>
+					</div>
+					<div class="setting-container">
+						<span class="setting-label">Quality: </span>
+						<input
+							type="range"
+							id="quality-slider"
+							min="0.1"
+							max="1.0"
+							value="0.3"
+							step="0.1"
+						/>
+						<span id="quality-value">0.3</span>
+						<span class="quality-help">Video compression quality</span>
 					</div>
 					<div class="setting-container">
 						<span class="setting-label">Sample Rate: </span>
@@ -82,7 +108,10 @@
 						placeholder="Enter custom system instructions..."
 						rows="6"
 					></textarea>
-					<button id="apply-config">Confirm</button>
+					<div class="config-buttons">
+						<button id="reset-config">Reset to Defaults</button>
+						<button id="apply-config">Confirm</button>
+					</div>
 				</div>
 			</div>
 			<button id="connect-button">Connect</button>

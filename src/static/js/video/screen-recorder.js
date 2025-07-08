@@ -24,10 +24,10 @@ export class ScreenRecorder {
         this.captureInterval = null;
         this.previewElement = null;
         this.options = {
-            fps: 2, // Lower FPS for screen sharing
-            quality: 0.8,
-            width: 1280,
-            height: 720,
+            fps: options.fps || 2, // Lower FPS for screen sharing
+            quality: options.quality || 0.8,
+            width: options.resizeWidth || options.width || 1280,
+            height: options.height || 720,
             maxFrameSize: 200 * 1024, // 200KB max per frame
             ...options
         };
@@ -216,4 +216,35 @@ export class ScreenRecorder {
         }
         return true;
     }
-} 
+
+    /**
+     * Set FPS for screen recording
+     * @param {number} fps - Frames per second
+     */
+    setFPS(fps) {
+        this.options.fps = fps;
+        if (this.isRecording && this.captureInterval) {
+            // Restart capture with new FPS
+            clearInterval(this.captureInterval);
+            this.startFrameCapture();
+        }
+    }
+
+    /**
+     * Set resize width for screen recording
+     * @param {number} width - Width in pixels
+     */
+    setResizeWidth(width) {
+        this.options.width = width;
+        // Note: Changing width requires restarting the screen capture stream
+        // This will be handled by the main application if needed
+    }
+
+    /**
+     * Set quality for screen recording
+     * @param {number} quality - Quality value between 0.1 and 1.0
+     */
+    setQuality(quality) {
+        this.options.quality = quality;
+    }
+}

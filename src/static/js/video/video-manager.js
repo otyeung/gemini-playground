@@ -126,14 +126,20 @@ export class VideoManager {
      * @returns {Promise<boolean>} Success status
      * @throws {ApplicationError} If video capture fails
      */
-    async start(fps, onFrame) {
+    async start(fps, resizeWidth, quality, onFrame) {
         try {
             this.onFrame = onFrame;
             this.fps = fps;
+            this.resizeWidth = resizeWidth;
+            this.quality = quality;
             Logger.info('Starting video manager');
             this.videoContainer.style.display = 'block';
-            console.log("fps:",fps);
-            this.videoRecorder = new VideoRecorder({fps: fps});
+            console.log("fps:",fps, "resizeWidth:",resizeWidth, "quality:",quality);
+            this.videoRecorder = new VideoRecorder({
+                fps: fps,
+                resizeWidth: resizeWidth,
+                quality: quality
+            });
                         
             await this.videoRecorder.start(this.previewVideo,this.facingMode, (base64Data) => {
                 if (!this.isActive) {
@@ -230,7 +236,7 @@ export class VideoManager {
             Logger.info('Flipping camera');
             this.facingMode = this.facingMode === 'user' ? 'environment' : 'user';         
             this.stop();
-            await this.start(this.fps,this.onFrame);
+            await this.start(this.fps, this.resizeWidth, this.quality, this.onFrame);
             Logger.info('Camera flipped successfully');
         } catch (error) {
             Logger.error('Error flipping camera:', error);
@@ -239,6 +245,39 @@ export class VideoManager {
                 ErrorCodes.VIDEO_FLIP_FAILED,
                 { originalError: error }
             );
+        }
+    }
+
+    /**
+     * Set FPS for video recording
+     * @param {number} fps - Frames per second
+     */
+    setFPS(fps) {
+        this.fps = fps;
+        if (this.videoRecorder) {
+            this.videoRecorder.setFPS(fps);
+        }
+    }
+
+    /**
+     * Set resize width for video recording
+     * @param {number} width - Width in pixels
+     */
+    setResizeWidth(width) {
+        this.resizeWidth = width;
+        if (this.videoRecorder) {
+            this.videoRecorder.setResizeWidth(width);
+        }
+    }
+
+    /**
+     * Set quality for video recording
+     * @param {number} quality - Quality value between 0.1 and 1.0
+     */
+    setQuality(quality) {
+        this.quality = quality;
+        if (this.videoRecorder) {
+            this.videoRecorder.setQuality(quality);
         }
     }
 }

@@ -31,12 +31,18 @@ const inputAudioVisualizer = document.getElementById("input-audio-visualizer");
 const apiKeyInput = document.getElementById("api-key");
 const voiceSelect = document.getElementById("voice-select");
 const languageSelect = document.getElementById("language-select");
-const fpsInput = document.getElementById("fps-input");
+const fpsSlider = document.getElementById("fps-slider");
+const fpsValue = document.getElementById("fps-value");
+const resizeWidthSlider = document.getElementById("resize-width-slider");
+const resizeWidthValue = document.getElementById("resize-width-value");
+const qualitySlider = document.getElementById("quality-slider");
+const qualityValue = document.getElementById("quality-value");
 const configToggle = document.getElementById("config-toggle");
 const configContainer = document.getElementById("config-container");
 const systemInstructionInput = document.getElementById("system-instruction");
 systemInstructionInput.value = CONFIG.SYSTEM_INSTRUCTION.TEXT;
 const applyConfigButton = document.getElementById("apply-config");
+const resetConfigButton = document.getElementById("reset-config");
 const responseTypeSelect = document.getElementById("response-type-select");
 const sampleRateSlider = document.getElementById("sample-rate-slider");
 const sampleRateValue = document.getElementById("sample-rate-value");
@@ -46,6 +52,8 @@ const savedApiKey = localStorage.getItem("gemini_api_key");
 const savedVoice = localStorage.getItem("gemini_voice");
 const savedLanguage = localStorage.getItem("gemini_language");
 const savedFPS = localStorage.getItem("video_fps");
+const savedResizeWidth = localStorage.getItem("video_resize_width");
+const savedQuality = localStorage.getItem("video_quality");
 const savedSystemInstruction = localStorage.getItem("system_instruction");
 const savedSampleRate = localStorage.getItem("sample_rate");
 
@@ -68,7 +76,24 @@ if (savedLanguage) {
 }
 
 if (savedFPS) {
-	fpsInput.value = savedFPS;
+	fpsSlider.value = savedFPS;
+	fpsValue.textContent = `${savedFPS} FPS`;
+} else {
+	fpsValue.textContent = `${fpsSlider.value} FPS`;
+}
+
+if (savedResizeWidth) {
+	resizeWidthSlider.value = savedResizeWidth;
+	resizeWidthValue.textContent = `${savedResizeWidth}px`;
+} else {
+	resizeWidthValue.textContent = `${resizeWidthSlider.value}px`;
+}
+
+if (savedQuality) {
+	qualitySlider.value = savedQuality;
+	qualityValue.textContent = savedQuality;
+} else {
+	qualityValue.textContent = qualitySlider.value;
 }
 if (savedSystemInstruction) {
 	systemInstructionInput.value = savedSystemInstruction;
@@ -100,9 +125,74 @@ configToggle.addEventListener("click", () => {
 	configToggle.classList.toggle("active");
 });
 
-applyConfigButton.addEventListener("click", () => {
-	configContainer.classList.toggle("active");
-	configToggle.classList.toggle("active");
+// Handle apply config button with disconnect/reconnect
+applyConfigButton.addEventListener("click", async () => {
+	const config = buildConfiguration();
+
+	// Save all settings to localStorage
+	localStorage.setItem("video_fps", config.fps);
+	localStorage.setItem("video_resize_width", config.resizeWidth);
+	localStorage.setItem("video_quality", config.quality);
+	localStorage.setItem("sample_rate", config.sampleRate);
+	localStorage.setItem("gemini_voice", config.voice);
+	localStorage.setItem("system_instruction", config.systemInstruction);
+	localStorage.setItem("gemini_language", config.language);
+
+	// Update CONFIG object
+	CONFIG.AUDIO.OUTPUT_SAMPLE_RATE = config.sampleRate;
+	CONFIG.SYSTEM_INSTRUCTION.TEXT = config.systemInstruction;
+
+	// Show applying status
+	const originalText = applyConfigButton.textContent;
+	applyConfigButton.textContent = "Applying...";
+	applyConfigButton.disabled = true;
+
+	try {
+		// If connected, disconnect and reconnect to apply changes
+		if (isConnected) {
+			logMessage("Disconnecting to apply new settings...", "system");
+
+			// Disconnect client
+			await client.disconnect();
+			isConnected = false;
+			connectButton.textContent = "Connect";
+			connectButton.classList.remove("connected");
+
+			// Wait a moment before reconnecting
+			await new Promise((resolve) => setTimeout(resolve, 1000));
+
+			// Reconnect with new settings
+			logMessage("Reconnecting with new settings...", "system");
+			await connectToWebsocket();
+		}
+
+		// Update existing instances with new settings
+		if (audioStreamer) {
+			audioStreamer.setSampleRate(config.sampleRate);
+		}
+		if (videoManager) {
+			videoManager.setFPS(config.fps);
+			videoManager.setResizeWidth(config.resizeWidth);
+			videoManager.setQuality(config.quality);
+		}
+		if (screenRecorder) {
+			screenRecorder.setFPS(config.fps);
+			screenRecorder.setResizeWidth(config.resizeWidth);
+			screenRecorder.setQuality(config.quality);
+		}
+
+		logMessage("Settings applied successfully", "system");
+	} catch (error) {
+		logMessage(`Error applying settings: ${error.message}`, "system");
+	} finally {
+		// Restore button state
+		applyConfigButton.textContent = originalText;
+		applyConfigButton.disabled = false;
+
+		// Close config panel
+		configContainer.classList.remove("active");
+		configToggle.classList.remove("active");
+	}
 });
 
 // State variables
@@ -499,7 +589,7 @@ async function handleVideoToggle() {
 		isConnected,
 	});
 
-	localStorage.setItem("video_fps", fpsInput.value);
+	localStorage.setItem("video_fps", fpsSlider.value);
 
 	if (!isVideoActive) {
 		try {
@@ -508,11 +598,16 @@ async function handleVideoToggle() {
 				videoManager = new VideoManager();
 			}
 
-			await videoManager.start(fpsInput.value, (frameData) => {
-				if (isConnected) {
-					client.sendRealtimeInput([frameData]);
+			await videoManager.start(
+				parseInt(fpsSlider.value),
+				parseInt(resizeWidthSlider.value),
+				parseFloat(qualitySlider.value),
+				(frameData) => {
+					if (isConnected) {
+						client.sendRealtimeInput([frameData]);
+					}
 				}
-			});
+			);
 
 			isVideoActive = true;
 			cameraIcon.textContent = "videocam_off";
@@ -561,7 +656,11 @@ async function handleScreenShare() {
 		try {
 			screenContainer.style.display = "block";
 
-			screenRecorder = new ScreenRecorder();
+			screenRecorder = new ScreenRecorder({
+			fps: parseInt(fpsSlider.value),
+			resizeWidth: parseInt(resizeWidthSlider.value),
+			quality: parseFloat(qualitySlider.value)
+		});
 			await screenRecorder.start(screenPreview, (frameData) => {
 				if (isConnected) {
 					client.sendRealtimeInput([
@@ -608,3 +707,135 @@ function stopScreenSharing() {
 
 screenButton.addEventListener("click", handleScreenShare);
 screenButton.disabled = true;
+
+// Handle FPS slider
+fpsSlider.addEventListener("input", (e) => {
+	const value = e.target.value;
+	fpsValue.textContent = `${value} FPS`;
+	localStorage.setItem("video_fps", value);
+
+	// Update existing video instances if they exist
+	if (videoManager) {
+		videoManager.setFPS(parseInt(value));
+	}
+	if (screenRecorder) {
+		screenRecorder.setFPS(parseInt(value));
+	}
+});
+
+// Handle resize width slider
+resizeWidthSlider.addEventListener("input", (e) => {
+	const value = e.target.value;
+	resizeWidthValue.textContent = `${value}px`;
+	localStorage.setItem("video_resize_width", value);
+
+	// Update existing video instances if they exist
+	if (videoManager) {
+		videoManager.setResizeWidth(parseInt(value));
+	}
+	if (screenRecorder) {
+		screenRecorder.setResizeWidth(parseInt(value));
+	}
+});
+
+// Handle quality slider
+qualitySlider.addEventListener("input", (e) => {
+	const value = e.target.value;
+	qualityValue.textContent = value;
+	localStorage.setItem("video_quality", value);
+
+	// Update existing video instances if they exist
+	if (videoManager) {
+		videoManager.setQuality(parseFloat(value));
+	}
+	if (screenRecorder) {
+		screenRecorder.setQuality(parseFloat(value));
+	}
+});
+
+/**
+ * Reset all configuration settings to default values
+ */
+function resetToDefaults() {
+	// Default values
+	const defaults = {
+		fps: 1,
+		resizeWidth: 640,
+		quality: 0.3,
+		sampleRate: 16000,
+		voice: "Aoede",
+		responseType: "audio",
+		systemInstruction: CONFIG.SYSTEM_INSTRUCTION.TEXT,
+	};
+
+	// Update UI elements
+	fpsSlider.value = defaults.fps;
+	fpsValue.textContent = `${defaults.fps} FPS`;
+
+	resizeWidthSlider.value = defaults.resizeWidth;
+	resizeWidthValue.textContent = `${defaults.resizeWidth}px`;
+
+	qualitySlider.value = defaults.quality;
+	qualityValue.textContent = defaults.quality;
+
+	sampleRateSlider.value = defaults.sampleRate;
+	sampleRateValue.textContent = `${defaults.sampleRate} Hz`;
+
+	voiceSelect.value = defaults.voice;
+	responseTypeSelect.value = defaults.responseType;
+	systemInstructionInput.value = defaults.systemInstruction;
+
+	// Clear localStorage
+	localStorage.removeItem("video_fps");
+	localStorage.removeItem("video_resize_width");
+	localStorage.removeItem("video_quality");
+	localStorage.removeItem("sample_rate");
+	localStorage.removeItem("gemini_voice");
+	localStorage.removeItem("system_instruction");
+
+	// Update CONFIG object
+	CONFIG.AUDIO.OUTPUT_SAMPLE_RATE = defaults.sampleRate;
+	CONFIG.SYSTEM_INSTRUCTION.TEXT = defaults.systemInstruction;
+
+	// Update existing instances
+	if (audioStreamer) {
+		audioStreamer.setSampleRate(defaults.sampleRate);
+	}
+	if (videoManager) {
+		videoManager.setFPS(defaults.fps);
+		videoManager.setResizeWidth(defaults.resizeWidth);
+		videoManager.setQuality(defaults.quality);
+	}
+	if (screenRecorder) {
+		screenRecorder.setFPS(defaults.fps);
+		screenRecorder.setResizeWidth(defaults.resizeWidth);
+		screenRecorder.setQuality(defaults.quality);
+	}
+
+	logMessage("Settings reset to default values", "system");
+}
+
+/**
+ * Build configuration object from current UI settings
+ */
+function buildConfiguration() {
+	return {
+		fps: parseInt(fpsSlider.value),
+		resizeWidth: parseInt(resizeWidthSlider.value),
+		quality: parseFloat(qualitySlider.value),
+		sampleRate: parseInt(sampleRateSlider.value),
+		voice: voiceSelect.value,
+		responseType: responseTypeSelect.value,
+		systemInstruction: systemInstructionInput.value,
+		language: languageSelect.value,
+	};
+}
+
+// Handle reset button
+resetConfigButton.addEventListener("click", () => {
+	if (
+		confirm("Are you sure you want to reset all settings to default values?")
+	) {
+		resetToDefaults();
+	}
+});
