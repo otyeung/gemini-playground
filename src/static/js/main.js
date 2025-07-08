@@ -657,10 +657,10 @@ async function handleScreenShare() {
 			screenContainer.style.display = "block";
 
 			screenRecorder = new ScreenRecorder({
-			fps: parseInt(fpsSlider.value),
-			resizeWidth: parseInt(resizeWidthSlider.value),
-			quality: parseFloat(qualitySlider.value)
-		});
+				fps: parseInt(fpsSlider.value),
+				resizeWidth: parseInt(resizeWidthSlider.value),
+				quality: parseFloat(qualitySlider.value),
+			});
 			await screenRecorder.start(screenPreview, (frameData) => {
 				if (isConnected) {
 					client.sendRealtimeInput([

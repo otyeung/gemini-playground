@@ -1,6 +1,6 @@
-import { Logger } from '../utils/logger.js';
-import { VideoRecorder } from './video-recorder.js';
-import { ApplicationError, ErrorCodes } from '../utils/error-boundary.js';
+import { Logger } from "../utils/logger.js";
+import { VideoRecorder } from "./video-recorder.js";
+import { ApplicationError, ErrorCodes } from "../utils/error-boundary.js";
 
 /**
  * @fileoverview Manages video capture and processing with motion detection and frame preview.
@@ -11,273 +11,291 @@ import { ApplicationError, ErrorCodes } from '../utils/error-boundary.js';
  * @class VideoManager
  */
 export class VideoManager {
-    /**
-     * Creates a new VideoManager instance
-     * @constructor
-     */
-    constructor() {
-        // Add at the start of constructor
-        if (!document.getElementById('video-container')) {
-            throw new ApplicationError(
-                'Video container element not found',
-                ErrorCodes.INVALID_STATE
-            );
-        }
-        // DOM elements
-        this.videoContainer = document.getElementById('video-container');
-        this.previewVideo = document.getElementById('preview');
-        this.stopVideoButton = document.getElementById('stop-video');
-        this.framePreview = document.createElement('canvas');
-        
-        // State management
-        this.lastFrameData = null;
-        this.lastSignificantFrame = null;
-        this.frameCount = 0;
-        this.lastFrameTime = 0;
-        this.videoRecorder = null;
-        this.isActive = false;
+	/**
+	 * Creates a new VideoManager instance
+	 * @constructor
+	 */
+	constructor() {
+		// Add at the start of constructor
+		if (!document.getElementById("video-container")) {
+			throw new ApplicationError(
+				"Video container element not found",
+				ErrorCodes.INVALID_STATE
+			);
+		}
+		// DOM elements
+		this.videoContainer = document.getElementById("video-container");
+		this.previewVideo = document.getElementById("preview");
+		this.stopVideoButton = document.getElementById("stop-video");
+		this.framePreview = document.createElement("canvas");
 
-        // Configuration
-        this.MOTION_THRESHOLD = 10;  // Minimum pixel difference to detect motion
-        this.FRAME_INTERVAL = 200;   // Minimum ms between frames
-        this.FORCE_FRAME_INTERVAL = 10; // Send frame every N frames regardless of motion
+		// State management
+		this.lastFrameData = null;
+		this.lastSignificantFrame = null;
+		this.frameCount = 0;
+		this.lastFrameTime = 0;
+		this.videoRecorder = null;
+		this.isActive = false;
 
-        this.setupFramePreview();
+		// Configuration
+		this.MOTION_THRESHOLD = 10; // Minimum pixel difference to detect motion
+		this.FRAME_INTERVAL = 200; // Minimum ms between frames
+		this.FORCE_FRAME_INTERVAL = 10; // Send frame every N frames regardless of motion
 
-        // 摄像头状态，用户切换镜头
-        this.facingMode = 'user';
-        this.onFrame = null;
-        this.fps = null;
-        
-        // 获取翻转按钮元素并添加事件监听
-        this.flipCameraButton = document.getElementById('flip-camera');
-        if (!this.flipCameraButton) {
-            throw new ApplicationError(
-                'Flip camera button element not found',
-                ErrorCodes.INVALID_STATE
-            );
-        }
-        
-        // 在构造函数中直接绑定事件
-        this.flipCameraButton.addEventListener('click', async () => {
-            try {
-                await this.flipCamera();
-            } catch (error) {
-                Logger.error('Error flipping camera:', error);
-            }
-        });
-    }
+		this.setupFramePreview();
 
-    /**
-     * Sets up the frame preview canvas
-     * @private
-     */
-    setupFramePreview() {
-        this.framePreview.id = 'frame-preview';
-        this.framePreview.width = 320;
-        this.framePreview.height = 240;
-        this.videoContainer.appendChild(this.framePreview);
+		// 摄像头状态，用户切换镜头
+		this.facingMode = "user";
+		this.onFrame = null;
+		this.fps = null;
 
-        // Add click handler to toggle preview size
-        this.framePreview.addEventListener('click', () => {
-            this.framePreview.classList.toggle('enlarged');
-        });
-    }
+		// 获取翻转按钮元素并添加事件监听
+		this.flipCameraButton = document.getElementById("flip-camera");
+		if (!this.flipCameraButton) {
+			throw new ApplicationError(
+				"Flip camera button element not found",
+				ErrorCodes.INVALID_STATE
+			);
+		}
 
-    /**
-     * Updates the frame preview with new image data
-     * @param {string} base64Data - Base64 encoded image data
-     * @private
-     */
-    updateFramePreview(base64Data,width,height) {
-        const img = new Image();
-        img.onload = () => {
-            const ctx = this.framePreview.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-        };
-        img.src = 'data:image/jpeg;base64,' + base64Data;
-    }
+		// 在构造函数中直接绑定事件
+		this.flipCameraButton.addEventListener("click", async () => {
+			try {
+				await this.flipCamera();
+			} catch (error) {
+				Logger.error("Error flipping camera:", error);
+			}
+		});
+	}
 
-    /**
-     * Detects motion between two frames
-     * @param {Uint8ClampedArray} prevFrame - Previous frame data
-     * @param {Uint8ClampedArray} currentFrame - Current frame data
-     * @returns {number} Motion score
-     * @private
-     */
-    detectMotion(prevFrame, currentFrame) {
-        let diff = 0;
-        const pixelsToCheck = prevFrame.length / 4;
-        const skipPixels = 2;
+	/**
+	 * Sets up the frame preview canvas
+	 * @private
+	 */
+	setupFramePreview() {
+		this.framePreview.id = "frame-preview";
+		this.framePreview.width = 320;
+		this.framePreview.height = 240;
+		this.videoContainer.appendChild(this.framePreview);
 
-        for (let i = 0; i < prevFrame.length; i += 4 * skipPixels) {
-            const rDiff = Math.abs(prevFrame[i] - currentFrame[i]);
-            const gDiff = Math.abs(prevFrame[i + 1] - currentFrame[i + 1]);
-            const bDiff = Math.abs(prevFrame[i + 2] - currentFrame[i + 2]);
-            diff += (rDiff + gDiff + bDiff) / 3;
-        }
+		// Add click handler to toggle preview size
+		this.framePreview.addEventListener("click", () => {
+			this.framePreview.classList.toggle("enlarged");
+		});
+	}
 
-        return diff / (pixelsToCheck / skipPixels);
-    }
+	/**
+	 * Updates the frame preview with new image data
+	 * @param {string} base64Data - Base64 encoded image data
+	 * @private
+	 */
+	updateFramePreview(base64Data, width, height) {
+		const img = new Image();
+		img.onload = () => {
+			const ctx = this.framePreview.getContext("2d");
+			ctx.drawImage(img, 0, 0, width, height);
+		};
+		img.src = "data:image/jpeg;base64," + base64Data;
+	}
 
-    /**
-     * Starts video capture and processing
-     * @param {Function} onFrame - Callback for processed frames
-     * @returns {Promise<boolean>} Success status
-     * @throws {ApplicationError} If video capture fails
-     */
-    async start(fps, resizeWidth, quality, onFrame) {
-        try {
-            this.onFrame = onFrame;
-            this.fps = fps;
-            this.resizeWidth = resizeWidth;
-            this.quality = quality;
-            Logger.info('Starting video manager');
-            this.videoContainer.style.display = 'block';
-            console.log("fps:",fps, "resizeWidth:",resizeWidth, "quality:",quality);
-            this.videoRecorder = new VideoRecorder({
-                fps: fps,
-                resizeWidth: resizeWidth,
-                quality: quality
-            });
-                        
-            await this.videoRecorder.start(this.previewVideo,this.facingMode, (base64Data) => {
-                if (!this.isActive) {
-                    //Logger.debug('Skipping frame - inactive');
-                    return;
-                }
+	/**
+	 * Detects motion between two frames
+	 * @param {Uint8ClampedArray} prevFrame - Previous frame data
+	 * @param {Uint8ClampedArray} currentFrame - Current frame data
+	 * @returns {number} Motion score
+	 * @private
+	 */
+	detectMotion(prevFrame, currentFrame) {
+		let diff = 0;
+		const pixelsToCheck = prevFrame.length / 4;
+		const skipPixels = 2;
 
-                const currentTime = Date.now();
-                if (currentTime - this.lastFrameTime < this.FRAME_INTERVAL) {
-                    return;
-                }
+		for (let i = 0; i < prevFrame.length; i += 4 * skipPixels) {
+			const rDiff = Math.abs(prevFrame[i] - currentFrame[i]);
+			const gDiff = Math.abs(prevFrame[i + 1] - currentFrame[i + 1]);
+			const bDiff = Math.abs(prevFrame[i + 2] - currentFrame[i + 2]);
+			diff += (rDiff + gDiff + bDiff) / 3;
+		}
 
-                this.processFrame(base64Data, onFrame);
-            });
+		return diff / (pixelsToCheck / skipPixels);
+	}
 
-            this.isActive = true;
-            return true;
+	/**
+	 * Starts video capture and processing
+	 * @param {Function} onFrame - Callback for processed frames
+	 * @returns {Promise<boolean>} Success status
+	 * @throws {ApplicationError} If video capture fails
+	 */
+	async start(fps, resizeWidth, quality, onFrame) {
+		try {
+			this.onFrame = onFrame;
+			this.fps = fps;
+			this.resizeWidth = resizeWidth;
+			this.quality = quality;
+			Logger.info("Starting video manager");
+			this.videoContainer.style.display = "block";
+			console.log(
+				"fps:",
+				fps,
+				"resizeWidth:",
+				resizeWidth,
+				"quality:",
+				quality
+			);
+			this.videoRecorder = new VideoRecorder({
+				fps: fps,
+				resizeWidth: resizeWidth,
+				quality: quality,
+			});
 
-        } catch (error) {
-            Logger.error('Video manager error:', error);
-            this.stop();
-            throw new ApplicationError(
-                'Failed to start video manager',
-                ErrorCodes.VIDEO_START_FAILED,
-                { originalError: error }
-            );
-        }
-    }
+			await this.videoRecorder.start(
+				this.previewVideo,
+				this.facingMode,
+				(base64Data) => {
+					if (!this.isActive) {
+						//Logger.debug('Skipping frame - inactive');
+						return;
+					}
 
-    /**
-     * Processes a single video frame
-     * @param {string} base64Data - Base64 encoded frame data
-     * @param {Function} onFrame - Frame callback
-     * @private
-     */
-    processFrame(base64Data, onFrame) {
-        const img = new Image();
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            
-            if (this.lastFrameData) {
-                const motionScore = this.detectMotion(this.lastFrameData, imageData.data);
-                if (motionScore < this.MOTION_THRESHOLD && this.frameCount % this.FORCE_FRAME_INTERVAL !== 0) {
-                    //Logger.debug(`Skipping frame - low motion (score: ${motionScore})`);
-                    return;
-                }
-            }
+					const currentTime = Date.now();
+					if (currentTime - this.lastFrameTime < this.FRAME_INTERVAL) {
+						return;
+					}
 
-            this.framePreviewWidth = Math.round(canvas.width * 0.5);
-            this.framePreviewHeight = Math.round(canvas.height * 0.5);
+					this.processFrame(base64Data, onFrame);
+				}
+			);
 
-            this.updateFramePreview(base64Data,this.framePreviewWidth,this.framePreviewHeight);
-            
-            this.lastFrameData = imageData.data;
-            this.lastSignificantFrame = base64Data;
-            this.lastFrameTime = Date.now();
-            this.frameCount++;
+			this.isActive = true;
+			return true;
+		} catch (error) {
+			Logger.error("Video manager error:", error);
+			this.stop();
+			throw new ApplicationError(
+				"Failed to start video manager",
+				ErrorCodes.VIDEO_START_FAILED,
+				{ originalError: error }
+			);
+		}
+	}
 
-            const size = Math.round(base64Data.length / 1024);
-            //Logger.debug(`Processing frame (${size}KB) - frame #${this.frameCount}`);
+	/**
+	 * Processes a single video frame
+	 * @param {string} base64Data - Base64 encoded frame data
+	 * @param {Function} onFrame - Frame callback
+	 * @private
+	 */
+	processFrame(base64Data, onFrame) {
+		const img = new Image();
+		img.onload = () => {
+			const canvas = document.createElement("canvas");
+			canvas.width = img.width;
+			canvas.height = img.height;
+			const ctx = canvas.getContext("2d");
+			ctx.drawImage(img, 0, 0);
+			const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-            onFrame({
-                mimeType: "image/jpeg",
-                data: base64Data
-            });
-        };
-        img.src = 'data:image/jpeg;base64,' + base64Data;
-    }
+			if (this.lastFrameData) {
+				const motionScore = this.detectMotion(
+					this.lastFrameData,
+					imageData.data
+				);
+				if (
+					motionScore < this.MOTION_THRESHOLD &&
+					this.frameCount % this.FORCE_FRAME_INTERVAL !== 0
+				) {
+					//Logger.debug(`Skipping frame - low motion (score: ${motionScore})`);
+					return;
+				}
+			}
 
-    /**
-     * Stops video capture and processing
-     */
-    stop() {
-        if (this.videoRecorder) {
-            this.videoRecorder.stop();
-            this.videoRecorder = null;
-        }
-        this.isActive = false;
-        this.videoContainer.style.display = 'none';
-        this.lastFrameData = null;
-        this.lastSignificantFrame = null;
-        this.frameCount = 0;
-    }
+			this.framePreviewWidth = Math.round(canvas.width * 0.5);
+			this.framePreviewHeight = Math.round(canvas.height * 0.5);
 
+			this.updateFramePreview(
+				base64Data,
+				this.framePreviewWidth,
+				this.framePreviewHeight
+			);
 
-    async flipCamera() {
+			this.lastFrameData = imageData.data;
+			this.lastSignificantFrame = base64Data;
+			this.lastFrameTime = Date.now();
+			this.frameCount++;
 
-        try {
-            Logger.info('Flipping camera');
-            this.facingMode = this.facingMode === 'user' ? 'environment' : 'user';         
-            this.stop();
-            await this.start(this.fps, this.resizeWidth, this.quality, this.onFrame);
-            Logger.info('Camera flipped successfully');
-        } catch (error) {
-            Logger.error('Error flipping camera:', error);
-            throw new ApplicationError(
-                'Failed to flip camera',
-                ErrorCodes.VIDEO_FLIP_FAILED,
-                { originalError: error }
-            );
-        }
-    }
+			const size = Math.round(base64Data.length / 1024);
+			//Logger.debug(`Processing frame (${size}KB) - frame #${this.frameCount}`);
 
-    /**
-     * Set FPS for video recording
-     * @param {number} fps - Frames per second
-     */
-    setFPS(fps) {
-        this.fps = fps;
-        if (this.videoRecorder) {
-            this.videoRecorder.setFPS(fps);
-        }
-    }
+			onFrame({
+				mimeType: "image/jpeg",
+				data: base64Data,
+			});
+		};
+		img.src = "data:image/jpeg;base64," + base64Data;
+	}
 
-    /**
-     * Set resize width for video recording
-     * @param {number} width - Width in pixels
-     */
-    setResizeWidth(width) {
-        this.resizeWidth = width;
-        if (this.videoRecorder) {
-            this.videoRecorder.setResizeWidth(width);
-        }
-    }
+	/**
+	 * Stops video capture and processing
+	 */
+	stop() {
+		if (this.videoRecorder) {
+			this.videoRecorder.stop();
+			this.videoRecorder = null;
+		}
+		this.isActive = false;
+		this.videoContainer.style.display = "none";
+		this.lastFrameData = null;
+		this.lastSignificantFrame = null;
+		this.frameCount = 0;
+	}
 
-    /**
-     * Set quality for video recording
-     * @param {number} quality - Quality value between 0.1 and 1.0
-     */
-    setQuality(quality) {
-        this.quality = quality;
-        if (this.videoRecorder) {
-            this.videoRecorder.setQuality(quality);
-        }
-    }
+	async flipCamera() {
+		try {
+			Logger.info("Flipping camera");
+			this.facingMode = this.facingMode === "user" ? "environment" : "user";
+			this.stop();
+			await this.start(this.fps, this.resizeWidth, this.quality, this.onFrame);
+			Logger.info("Camera flipped successfully");
+		} catch (error) {
+			Logger.error("Error flipping camera:", error);
+			throw new ApplicationError(
+				"Failed to flip camera",
+				ErrorCodes.VIDEO_FLIP_FAILED,
+				{ originalError: error }
+			);
+		}
+	}
+
+	/**
+	 * Set FPS for video recording
+	 * @param {number} fps - Frames per second
+	 */
+	setFPS(fps) {
+		this.fps = fps;
+		if (this.videoRecorder) {
+			this.videoRecorder.setFPS(fps);
+		}
+	}
+
+	/**
+	 * Set resize width for video recording
+	 * @param {number} width - Width in pixels
+	 */
+	setResizeWidth(width) {
+		this.resizeWidth = width;
+		if (this.videoRecorder) {
+			this.videoRecorder.setResizeWidth(width);
+		}
+	}
+
+	/**
+	 * Set quality for video recording
+	 * @param {number} quality - Quality value between 0.1 and 1.0
+	 */
+	setQuality(quality) {
+		this.quality = quality;
+		if (this.videoRecorder) {
+			this.videoRecorder.setQuality(quality);
+		}
+	}
 }

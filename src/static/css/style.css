@@ -771,11 +771,15 @@ body {
 		font-size: 12px;
 	}
 
-	#fps-slider, #resize-width-slider, #quality-slider {
+	#fps-slider,
+	#resize-width-slider,
+	#quality-slider {
 		width: 120px;
 	}
 
-	#fps-value, #resize-width-value, #quality-value {
+	#fps-value,
+	#resize-width-value,
+	#quality-value {
 		min-width: 50px;
 		font-size: 12px;
 	}
